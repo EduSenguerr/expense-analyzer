@@ -1,0 +1,17 @@
+[project]
+name = "expense-analyzer"
+version = "0.1.0"
+description = "CLI tool to analyze personal expense CSV files"
+authors = [{name = "Your Name"}]
+requires-python = ">=3.10"
+dependencies = [
+    "typer",
+    "rich"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
