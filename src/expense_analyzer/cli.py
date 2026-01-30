@@ -8,6 +8,9 @@ from rich.table import Table
 from expense_analyzer.parser import load_transactions
 from expense_analyzer.categorize import categorize_transaction
 from expense_analyzer.analyze import build_monthly_summary
+from expense_analyzer.reporting import ensure_reports_dir, write_monthly_summary_json
+from expense_analyzer import __init__ as pkg 
+
 
 
 app = typer.Typer(add_completion=False)
@@ -56,6 +59,26 @@ def summary(csv_path: Path) -> None:
             table.add_row(cat, f"{total:.2f}")
 
         console.print(table)
+
+@app.command()
+def report(csv_path: Path) -> None:
+    """
+    Generate JSON reports in reports/ for each month found in the CSV.
+    """
+    txns = load_transactions(csv_path)
+    summaries = build_monthly_summary(txns)
+
+    reports_dir = ensure_reports_dir(Path.cwd())
+
+    created = []
+    for _month, s in summaries.items():
+        out_path = write_monthly_summary_json(reports_dir, s)
+        created.append(out_path)
+
+    console.print(f"[bold green]Created {len(created)} report file(s):[/bold green]")
+    for p in created:
+        console.print(f"- {p}")
+
 
 
 
