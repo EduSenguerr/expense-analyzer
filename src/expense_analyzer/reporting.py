@@ -7,13 +7,13 @@ from pathlib import Path
 from expense_analyzer.analyze import Summary
 
 
-def ensure_reports_dir(project_root: Path) -> Path:
+def ensure_reports_dir(out_dir: Path) -> Path:
     """
-    Ensure the reports/ directory exists and return its path.
+    Ensure an output directory exists and return its resolved path.
     """
-    reports_dir = project_root / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    return reports_dir
+    out_dir = out_dir.expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
 
 
 def write_monthly_summary_json(reports_dir: Path, summary: Summary) -> Path:

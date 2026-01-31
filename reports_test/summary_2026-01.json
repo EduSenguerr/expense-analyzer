@@ -1,0 +1,13 @@
+{
+  "month": "2026-01",
+  "income_total": 2500.0,
+  "expense_total": 1290.32,
+  "net_total": 1209.68,
+  "by_category": {
+    "Rent": 1200.0,
+    "Groceries": 54.18,
+    "Subscriptions": 15.49,
+    "Transport": 14.2,
+    "Coffee": 6.45
+  }
+}
