@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from expense_analyzer.parser import Transaction
+from expense_analyzer.normalize import normalize_description
+
 
 
 @dataclass(frozen=True)
@@ -42,8 +44,12 @@ def categorize_description(description: str, rules: Iterable[CategoryRule] = DEF
 
 def categorize_transaction(txn: Transaction) -> str:
     """
-    Categorize a transaction. Amount can influence category (e.g. income).
+    Categorize a transaction.
+    - Income is determined by amount > 0
+    - Expenses use normalized merchant text for better matching
     """
     if txn.amount > 0:
         return "Income"
-    return categorize_description(txn.description)
+
+    merchant = normalize_description(txn.description)
+    return categorize_description(merchant)

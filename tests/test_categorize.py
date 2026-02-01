@@ -9,5 +9,5 @@ def test_income_category_by_amount() -> None:
 
 
 def test_keyword_category() -> None:
-    txn = Transaction(posted_date=date(2026, 1, 2), description="STARBUCKS", amount=-5.0)
+    txn = Transaction(posted_date=date(2026, 1, 2), description="STARBUCKS #1234", amount=-5.0)
     assert categorize_transaction(txn) == "Coffee"

@@ -10,6 +10,7 @@ from expense_analyzer.categorize import categorize_transaction
 from expense_analyzer.analyze import build_monthly_summary
 from expense_analyzer.reporting import ensure_reports_dir, write_monthly_summary_json
 from expense_analyzer.validators import validate_month
+from expense_analyzer.normalize import normalize_description
 
 
 app = typer.Typer(add_completion=False)
@@ -26,12 +27,14 @@ def preview(csv_path: Path) -> None:
     table = Table(title=f"Preview: {csv_path.name}")
     table.add_column("Date", style="bold")
     table.add_column("Amount", justify="right")
+    table.add_column("Merchant")
     table.add_column("Category")
     table.add_column("Description", overflow="fold")
 
     for txn in txns[:20]:
+        merchant = normalize_description(txn.description)
         category = categorize_transaction(txn)
-        table.add_row(str(txn.posted_date), f"{txn.amount:.2f}", category, txn.description)
+        table.add_row(str(txn.posted_date), f"{txn.amount:.2f}", merchant, category, txn.description)
 
     console.print(table)
     console.print(f"[bold]Loaded:[/bold] {len(txns)} transactions")
