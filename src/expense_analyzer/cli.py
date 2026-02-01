@@ -11,6 +11,7 @@ from expense_analyzer.analyze import build_monthly_summary
 from expense_analyzer.reporting import ensure_reports_dir, write_monthly_summary_json
 from expense_analyzer.validators import validate_month
 from expense_analyzer.normalize import normalize_description
+from expense_analyzer.analyze import detect_unusual_spending
 
 
 app = typer.Typer(add_completion=False)
@@ -102,6 +103,46 @@ def report(
     console.print(f"[bold green]Created {len(created)} report file(s):[/bold green]")
     for p in created:
         console.print(f"- {p}")
+
+
+@app.command()
+def alerts(
+    csv_path: Path,
+    month: str = typer.Option("", "--month", help="Filter alerts to a specific month (YYYY-MM)."),
+) -> None:
+    """
+    Show unusually large expenses based on category averages.
+    """
+    txns = load_transactions(csv_path)
+    alerts_by_month = detect_unusual_spending(txns)
+
+    if month:
+        month = validate_month(month)
+        alerts_by_month = {month: alerts_by_month.get(month, [])}
+
+    any_alerts = False
+    for month_key, alerts_list in alerts_by_month.items():
+        if not alerts_list:
+            continue
+
+        any_alerts = True
+        console.print(f"\n[bold red]Alerts — {month_key}[/bold red]")
+
+        table = Table(title="Unusual spending")
+        table.add_column("Date", style="bold")
+        table.add_column("Category")
+        table.add_column("Merchant")
+        table.add_column("Amount", justify="right")
+        table.add_column("Reason", overflow="fold")
+
+        for a in alerts_list:
+            table.add_row(a.posted_date, a.category, a.merchant, f"{a.amount:.2f}", a.reason)
+
+        console.print(table)
+
+    if not any_alerts:
+        console.print("[green]No unusual spending detected.[/green]")
+
 
 
 def main() -> None:
