@@ -109,12 +109,20 @@ def report(
 def alerts(
     csv_path: Path,
     month: str = typer.Option("", "--month", help="Filter alerts to a specific month (YYYY-MM)."),
+    multiplier: float = typer.Option(2.5, "--multiplier", help="Alert threshold multiplier vs category average."),
+    min_amount: float = typer.Option(50.0, "--min-amount", help="Minimum expense amount to consider for alerts."),
+    min_samples: int = typer.Option(3, "--min-samples", help="Minimum number of samples in a category to enable alerts."),
 ) -> None:
     """
     Show unusually large expenses based on category averages.
     """
     txns = load_transactions(csv_path)
-    alerts_by_month = detect_unusual_spending(txns)
+    alerts_by_month = detect_unusual_spending(
+        txns,
+        multiplier=multiplier,
+        min_amount=min_amount,
+        min_samples=min_samples,
+    )
 
     if month:
         month = validate_month(month)

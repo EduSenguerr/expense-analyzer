@@ -76,7 +76,12 @@ def build_monthly_summary(transactions: list[Transaction]) -> dict[str, Summary]
     return results
 
 
-def detect_unusual_spending(transactions: list[Transaction]) -> dict[str, list[Alert]]:
+def detect_unusual_spending(
+    transactions: list[Transaction],
+    multiplier: float = 2.5,
+    min_amount: float = 50.0,
+    min_samples: int = 3,
+) -> dict[str, list[Alert]]:
     """
     Detect unusually large expenses per month and category.
 
@@ -110,7 +115,7 @@ def detect_unusual_spending(transactions: list[Transaction]) -> dict[str, list[A
         spent = abs(txn.amount)
         avg = avg_by_bucket[(month, category)]
 
-        if spent >= 50.0 and spent >= 2.5 * avg and len(buckets[(month, category)]) >= 3:
+        if spent >= min_amount and spent >= multiplier * avg and len(buckets[(month, category)]) >= min_samples:
             merchant = normalize_description(txn.description)
             alerts_by_month[month].append(
                 Alert(
