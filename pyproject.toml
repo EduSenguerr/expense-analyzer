@@ -9,6 +9,9 @@ dependencies = [
     "rich"
 ]
 
+[project.scripts]
+expense-analyzer = "expense_analyzer.cli:main"
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"

@@ -1,0 +1,2 @@
+[console_scripts]
+expense-analyzer = expense_analyzer.cli:main
