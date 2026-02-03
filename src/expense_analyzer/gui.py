@@ -8,6 +8,10 @@ from expense_analyzer.parser import load_transactions
 from expense_analyzer.normalize import normalize_description
 from expense_analyzer.categorize import categorize_transaction
 from expense_analyzer.analyze import build_monthly_summary, detect_unusual_spending
+from expense_analyzer.storage import load_manual_entries, save_manual_entries
+
+APP_ROOT = Path(__file__).resolve().parents[2]  # project root
+MANUAL_PATH = APP_ROOT / "data" / "manual_entries.json"
 
 
 class ExpenseAnalyzerApp:
@@ -17,10 +21,16 @@ class ExpenseAnalyzerApp:
         self.root.geometry("980x600")
 
         self.csv_path: Path | None = None
-        self.transactions = []
+        self.csv_transactions = []
+        self.manual_transactions = []
 
         self.status_var = tk.StringVar(value="Ready. Load a CSV to begin.")
         self._build_ui()
+
+        self.manual_transactions = load_manual_entries(MANUAL_PATH)
+        if self.manual_transactions:
+            self.set_status(f"Loaded {len(self.manual_transactions)} manual entries.")
+            self._refresh_all_views()
 
     def _build_ui(self) -> None:
         # Top bar
@@ -109,14 +119,16 @@ class ExpenseAnalyzerApp:
 
         try:
             self.csv_path = Path(file_path)
-            self.transactions = load_transactions(self.csv_path)
+            self.csv_transactions = load_transactions(self.csv_path)
         except Exception as e:
             messagebox.showerror("Could not load CSV", str(e))
             self.set_status("Error loading file.")
             return
 
         self.file_label.config(text=self.csv_path.name)
-        self.set_status(f"Loaded {len(self.transactions)} transactions.")
+        self.set_status(
+            f"Loaded {len(self.csv_transactions)} CSV transactions (+ {len(self.manual_transactions)} manual)."
+        )         
         self._refresh_all_views()
 
     def add_expense_dialog(self) -> None:
@@ -184,9 +196,10 @@ class ExpenseAnalyzerApp:
                 amount = -amount
     
             txn = Transaction(posted_date=posted, description=raw_desc, amount=amount)
-            self.transactions.append(txn)
-    
-            self.set_status("Added expense.")
+            self.manual_transactions.append(txn)
+            save_manual_entries(MANUAL_PATH, self.manual_transactions)
+            
+            self.set_status("Added expense (saved).")
             self._refresh_all_views()
     
             win.destroy()
@@ -210,7 +223,9 @@ class ExpenseAnalyzerApp:
         for item in self.txn_tree.get_children():
             self.txn_tree.delete(item)
 
-        for txn in self.transactions:
+        transactions = self.csv_transactions + self.manual_transactions
+
+        for txn in transactions:
             merchant = normalize_description(txn.description)
             category = categorize_transaction(txn)
             self.txn_tree.insert(
@@ -221,10 +236,12 @@ class ExpenseAnalyzerApp:
 
     def _populate_summary(self) -> None:
         self.summary_text.delete("1.0", "end")
-        if not self.transactions:
+
+        transactions = self.csv_transactions + self.manual_transactions
+        if not transactions:
             return
 
-        summaries = build_monthly_summary(self.transactions)
+        summaries = build_monthly_summary(transactions)
 
         for month, s in summaries.items():
             self.summary_text.insert("end", f"{month}\n")
@@ -240,10 +257,11 @@ class ExpenseAnalyzerApp:
         for item in self.alert_tree.get_children():
             self.alert_tree.delete(item)
 
-        if not self.transactions:
+        transactions = self.csv_transactions + self.manual_transactions
+        if not transactions:
             return
 
-        alerts_by_month = detect_unusual_spending(self.transactions)
+        alerts_by_month = detect_unusual_spending(transactions)
 
         # show all alerts across months for now (v0.1)
         for month, alerts in alerts_by_month.items():
