@@ -28,6 +28,7 @@ class ExpenseAnalyzerApp:
         top.pack(fill="x")
 
         ttk.Button(top, text="Load CSV", command=self.load_csv).pack(side="left")
+        ttk.Button(top, text="Add Expense", command=self.add_expense_dialog).pack(side="left", padx=(8, 0))
         self.file_label = ttk.Label(top, text="No file loaded", padding=(10, 0))
         self.file_label.pack(side="left")
 
@@ -117,6 +118,88 @@ class ExpenseAnalyzerApp:
         self.file_label.config(text=self.csv_path.name)
         self.set_status(f"Loaded {len(self.transactions)} transactions.")
         self._refresh_all_views()
+
+    def add_expense_dialog(self) -> None:
+        """
+        Open a small dialog to manually add an expense.
+        Only asks for date, amount, and description. Category is inferred automatically.
+        """
+        win = tk.Toplevel(self.root)
+        win.title("Add Expense")
+        win.geometry("420x220")
+        win.transient(self.root)
+        win.grab_set()
+    
+        # Variables
+        date_var = tk.StringVar(value="")
+        amount_var = tk.StringVar(value="")
+        desc_var = tk.StringVar(value="")
+    
+        # Layout
+        frame = ttk.Frame(win, padding=12)
+        frame.pack(fill="both", expand=True)
+    
+        ttk.Label(frame, text="Date (YYYY-MM-DD)").grid(row=0, column=0, sticky="w")
+        date_entry = ttk.Entry(frame, textvariable=date_var, width=24)
+        date_entry.grid(row=0, column=1, sticky="ew", pady=6)
+    
+        ttk.Label(frame, text="Amount").grid(row=1, column=0, sticky="w")
+        amount_entry = ttk.Entry(frame, textvariable=amount_var, width=24)
+        amount_entry.grid(row=1, column=1, sticky="ew", pady=6)
+    
+        ttk.Label(frame, text="Merchant / Description").grid(row=2, column=0, sticky="w")
+        desc_entry = ttk.Entry(frame, textvariable=desc_var, width=24)
+        desc_entry.grid(row=2, column=1, sticky="ew", pady=6)
+    
+        frame.columnconfigure(1, weight=1)
+    
+        def on_add() -> None:
+            from datetime import date
+            from expense_analyzer.parser import Transaction
+    
+            raw_date = date_var.get().strip()
+            raw_amount = amount_var.get().strip()
+            raw_desc = desc_var.get().strip()
+    
+            if not raw_date or not raw_amount or not raw_desc:
+                messagebox.showwarning("Missing info", "Please fill date, amount, and description.")
+                return
+    
+            # Parse date
+            try:
+                posted = date.fromisoformat(raw_date)
+            except ValueError:
+                messagebox.showerror("Invalid date", "Date must be in YYYY-MM-DD format.")
+                return
+    
+            # Parse amount
+            try:
+                amount = float(raw_amount)
+            except ValueError:
+                messagebox.showerror("Invalid amount", "Amount must be a number, e.g. -12.50")
+                return
+    
+            # Force expenses to be negative (UX: user can type positive, we convert)
+            if amount > 0:
+                amount = -amount
+    
+            txn = Transaction(posted_date=posted, description=raw_desc, amount=amount)
+            self.transactions.append(txn)
+    
+            self.set_status("Added expense.")
+            self._refresh_all_views()
+    
+            win.destroy()
+    
+        btns = ttk.Frame(frame)
+        btns.grid(row=3, column=0, columnspan=2, sticky="e", pady=(12, 0))
+    
+        ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="right")
+        ttk.Button(btns, text="Add", command=on_add).pack(side="right", padx=(0, 8))
+    
+        # UX: focus first field
+        date_entry.focus_set()
+
 
     def _refresh_all_views(self) -> None:
         self._populate_transactions()
