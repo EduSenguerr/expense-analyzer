@@ -23,6 +23,7 @@ class ExpenseAnalyzerApp:
         self.csv_path: Path | None = None
         self.csv_transactions = []
         self.manual_transactions = []
+        self._row_meta: dict[str, tuple[str, int]] = {}
 
         self.status_var = tk.StringVar(value="Ready. Load a CSV to begin.")
         self._build_ui()
@@ -40,7 +41,7 @@ class ExpenseAnalyzerApp:
 
         ttk.Button(top, text="Load CSV", command=self.load_csv).pack(side="left")
         ttk.Button(top, text="Add Expense", command=self.add_expense_dialog).pack(side="left", padx=(8, 0))
-        ttk.Button(top, text="Clear Manual", command=self.clear_manual_entries).pack(side="left", padx=(8, 0))
+        ttk.Button(top, text="Clear Entry", command=self.clear_selected_entry).pack(side="left", padx=(8, 0))
         ttk.Button(top, text="Export CSV", command=self.export_combined_csv).pack(side="left", padx=(8, 0))
         self.file_label = ttk.Label(top, text="No file loaded", padding=(10, 0))
         self.file_label.pack(side="left")
@@ -281,8 +282,71 @@ class ExpenseAnalyzerApp:
             messagebox.showinfo("Export CSV", f"Saved:\n{out_path}")
         except Exception as e:
             messagebox.showerror("Export failed", str(e))
-    
 
+    def clear_selected_entry(self) -> None:
+        """
+        Delete the selected transaction row from the current session.
+        Manual entries are removed permanently from storage.
+        CSV entries are removed only from the loaded CSV session list.
+        """
+        selection = self.txn_tree.selection()
+        if not selection:
+            messagebox.showinfo("Clear Entry", "Select a transaction in the Transactions tab first.")
+            return
+    
+        item_id = selection[0]
+        meta = self._row_meta.get(item_id)
+        if not meta:
+            messagebox.showerror("Clear Entry", "Could not resolve the selected row. Try refreshing.")
+            return
+    
+        source, idx = meta
+    
+        values = self.txn_tree.item(item_id, "values")
+        date_str = values[0] if len(values) > 0 else ""
+        amount_str = values[1] if len(values) > 1 else ""
+        merchant_str = values[2] if len(values) > 2 else ""
+    
+        if source == "csv":
+            confirm = messagebox.askyesno(
+                "Clear Entry (CSV)",
+                f"This will remove the entry from the current session only.\n"
+                f"It will NOT modify your original bank CSV.\n\n"
+                f"{date_str} | {amount_str} | {merchant_str}\n\n"
+                f"Continue?"
+            )
+            if not confirm:
+                return
+    
+            # Remove from in-memory CSV list
+            if 0 <= idx < len(self.csv_transactions):
+                self.csv_transactions.pop(idx)
+    
+            self.set_status("Removed CSV entry (session only).")
+            self._refresh_all_views()
+            return
+    
+        # manual
+        confirm = messagebox.askyesno(
+            "Clear Entry (Manual)",
+            f"This will permanently delete this manual entry.\n\n"
+            f"{date_str} | {amount_str} | {merchant_str}\n\n"
+            f"Continue?"
+        )
+        if not confirm:
+            return
+    
+        if 0 <= idx < len(self.manual_transactions):
+            self.manual_transactions.pop(idx)
+    
+        # Persist manual deletion
+        from expense_analyzer.storage import save_manual_entries
+        save_manual_entries(MANUAL_PATH, self.manual_transactions)
+    
+        self.set_status("Deleted manual entry (saved).")
+        self._refresh_all_views()
+    
+    
     def clear_manual_entries(self) -> None:
         """
         Clear all manual entries from memory and disk.
@@ -326,16 +390,25 @@ class ExpenseAnalyzerApp:
         for item in self.txn_tree.get_children():
             self.txn_tree.delete(item)
 
-        transactions = self.csv_transactions + self.manual_transactions
+        self._row_meta.clear()
 
-        for txn in transactions:
+        rows = []
+        for i, txn in enumerate(self.csv_transactions):
+            rows.append(("csv", i, txn))
+        for i, txn in enumerate(self.manual_transactions):
+            rows.append(("manual", i, txn))
+    
+        for source, idx, txn in rows:
             merchant = normalize_description(txn.description)
             category = categorize_transaction(txn)
-            self.txn_tree.insert(
+    
+            item_id = self.txn_tree.insert(
                 "",
                 "end",
                 values=(str(txn.posted_date), f"{txn.amount:.2f}", merchant, category, txn.description),
             )
+    
+            self._row_meta[item_id] = (source, idx)
 
     def _populate_summary(self) -> None:
         self.summary_text.delete("1.0", "end")
