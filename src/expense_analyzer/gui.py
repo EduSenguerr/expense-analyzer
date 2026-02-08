@@ -39,6 +39,7 @@ class ExpenseAnalyzerApp:
 
         ttk.Button(top, text="Load CSV", command=self.load_csv).pack(side="left")
         ttk.Button(top, text="Add Expense", command=self.add_expense_dialog).pack(side="left", padx=(8, 0))
+        ttk.Button(top, text="Clear Manual", command=self.clear_manual_entries).pack(side="left", padx=(8, 0))
         self.file_label = ttk.Label(top, text="No file loaded", padding=(10, 0))
         self.file_label.pack(side="left")
 
@@ -213,6 +214,37 @@ class ExpenseAnalyzerApp:
         # UX: focus first field
         date_entry.focus_set()
 
+    def clear_manual_entries(self) -> None:
+        """
+        Clear all manual entries from memory and disk.
+        """
+        if not self.manual_transactions:
+            messagebox.showinfo("Clear manual entries", "There are no manual entries to clear.")
+            return
+    
+        confirm = messagebox.askyesno(
+            "Clear manual entries",
+            "This will delete ALL manual entries you added manually.\n\n"
+            "CSV-loaded transactions will not be affected.\n\n"
+            "Continue?"
+        )
+        if not confirm:
+            return
+    
+        # Clear in-memory list
+        self.manual_transactions = []
+    
+        # Remove file on disk (if present)
+        try:
+            if MANUAL_PATH.exists():
+                MANUAL_PATH.unlink()
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not delete manual entries file:\n{e}")
+            return
+    
+        self.set_status("Manual entries cleared.")
+        self._refresh_all_views()
+    
 
     def _refresh_all_views(self) -> None:
         self._populate_transactions()
