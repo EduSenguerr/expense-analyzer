@@ -41,6 +41,7 @@ class ExpenseAnalyzerApp:
         ttk.Button(top, text="Load CSV", command=self.load_csv).pack(side="left")
         ttk.Button(top, text="Add Expense", command=self.add_expense_dialog).pack(side="left", padx=(8, 0))
         ttk.Button(top, text="Clear Manual", command=self.clear_manual_entries).pack(side="left", padx=(8, 0))
+        ttk.Button(top, text="Export CSV", command=self.export_combined_csv).pack(side="left", padx=(8, 0))
         self.file_label = ttk.Label(top, text="No file loaded", padding=(10, 0))
         self.file_label.pack(side="left")
         self.count_label = ttk.Label(top, text="CSV: 0 | Manual: 0 | Total: 0", padding=(14, 0))
@@ -227,6 +228,60 @@ class ExpenseAnalyzerApp:
     
         # UX: focus first field
         date_entry.focus_set()
+
+    def export_combined_csv(self) -> None:
+        """
+        Export the combined (CSV + manual) dataset into a new CSV file with
+        normalized merchant and inferred category columns.
+        """
+        import csv
+    
+        transactions = self.csv_transactions + self.manual_transactions
+        if not transactions:
+            messagebox.showinfo("Export CSV", "There are no transactions to export yet.")
+            return
+    
+        default_name = "expense_analyzer_export.csv"
+        if self.csv_path:
+            default_name = f"cleaned_{self.csv_path.stem}.csv"
+    
+        out_path_str = filedialog.asksaveasfilename(
+            title="Export combined dataset",
+            defaultextension=".csv",
+            initialfile=default_name,
+            filetypes=[("CSV files", "*.csv")],
+        )
+        if not out_path_str:
+            return
+    
+        out_path = Path(out_path_str)
+    
+        try:
+            with out_path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=["date", "amount", "merchant", "category", "description"],
+                )
+                writer.writeheader()
+    
+                for txn in transactions:
+                    merchant = normalize_description(txn.description)
+                    category = categorize_transaction(txn)
+                    writer.writerow(
+                        {
+                            "date": str(txn.posted_date),
+                            "amount": f"{txn.amount:.2f}",
+                            "merchant": merchant,
+                            "category": category,
+                            "description": txn.description,
+                        }
+                    )
+    
+            self.set_status(f"Exported CSV: {out_path.name}")
+            messagebox.showinfo("Export CSV", f"Saved:\n{out_path}")
+        except Exception as e:
+            messagebox.showerror("Export failed", str(e))
+    
 
     def clear_manual_entries(self) -> None:
         """
