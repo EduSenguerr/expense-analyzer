@@ -26,6 +26,7 @@ class ExpenseAnalyzerApp:
 
         self.status_var = tk.StringVar(value="Ready. Load a CSV to begin.")
         self._build_ui()
+        self._update_counts()
 
         self.manual_transactions = load_manual_entries(MANUAL_PATH)
         if self.manual_transactions:
@@ -42,6 +43,8 @@ class ExpenseAnalyzerApp:
         ttk.Button(top, text="Clear Manual", command=self.clear_manual_entries).pack(side="left", padx=(8, 0))
         self.file_label = ttk.Label(top, text="No file loaded", padding=(10, 0))
         self.file_label.pack(side="left")
+        self.count_label = ttk.Label(top, text="CSV: 0 | Manual: 0 | Total: 0", padding=(14, 0))
+        self.count_label.pack(side="left")
 
         # Tabs
         self.tabs = ttk.Notebook(self.root)
@@ -109,6 +112,17 @@ class ExpenseAnalyzerApp:
     def set_status(self, msg: str) -> None:
         self.status_var.set(msg)
         self.root.update_idletasks()
+
+
+    def _update_counts(self) -> None:
+        """
+        Update the top-bar counter showing CSV/manual/total transaction counts.
+        """
+        csv_count = len(self.csv_transactions)
+        manual_count = len(self.manual_transactions)
+        total = csv_count + manual_count
+        self.count_label.config(text=f"CSV: {csv_count} | Manual: {manual_count} | Total: {total}")
+
 
     def load_csv(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -247,9 +261,11 @@ class ExpenseAnalyzerApp:
     
 
     def _refresh_all_views(self) -> None:
+        self._update_counts()
         self._populate_transactions()
         self._populate_summary()
         self._populate_alerts()
+
 
     def _populate_transactions(self) -> None:
         for item in self.txn_tree.get_children():
