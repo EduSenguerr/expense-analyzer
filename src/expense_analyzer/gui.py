@@ -12,6 +12,7 @@ from expense_analyzer.storage import load_manual_entries, save_manual_entries
 
 APP_ROOT = Path(__file__).resolve().parents[2]  # project root
 MANUAL_PATH = APP_ROOT / "data" / "manual_entries.json"
+SETTINGS_PATH = APP_ROOT / "data" / "settings.json"
 
 
 class ExpenseAnalyzerApp:
@@ -26,9 +27,14 @@ class ExpenseAnalyzerApp:
         self._row_meta: dict[str, tuple[str, int]] = {}
 
         self.status_var = tk.StringVar(value="Ready. Load a CSV to begin.")
+
+        from expense_analyzer.settings_store import load_settings
+
+        self.settings = load_settings(SETTINGS_PATH)
+
         self._build_ui()
         self._update_counts()
-
+        
         self.manual_transactions = load_manual_entries(MANUAL_PATH)
         if self.manual_transactions:
             self.set_status(f"Loaded {len(self.manual_transactions)} manual entries.")
@@ -55,10 +61,12 @@ class ExpenseAnalyzerApp:
         self.tab_transactions = ttk.Frame(self.tabs, padding=10)
         self.tab_summary = ttk.Frame(self.tabs, padding=10)
         self.tab_alerts = ttk.Frame(self.tabs, padding=10)
+        self.tab_budgets = ttk.Frame(self.tabs, padding=10)
 
         self.tabs.add(self.tab_transactions, text="Transactions")
         self.tabs.add(self.tab_summary, text="Summary")
         self.tabs.add(self.tab_alerts, text="Alerts")
+        self.tabs.add(self.tab_budgets, text="Budgets & Goals")
 
         # Transactions table
         self.txn_tree = ttk.Treeview(
@@ -106,15 +114,63 @@ class ExpenseAnalyzerApp:
         self.alert_tree.column("amount", width=90, anchor="e")
         self.alert_tree.column("reason", width=420, anchor="w")
 
+        self._build_budgets_tab()
+
         # Status bar
         status = ttk.Frame(self.root, padding=(10, 6))
         status.pack(fill="x")
         ttk.Label(status, textvariable=self.status_var).pack(side="left")
 
+    def _build_budgets_tab(self) -> None:
+        from expense_analyzer.settings_store import DEFAULT_SETTINGS
+    
+        # Vars
+        self.income_target_var = tk.StringVar(value="")
+        self.savings_goal_var = tk.StringVar(value="")
+    
+        top = ttk.Frame(self.tab_budgets)
+        top.pack(fill="x")
+    
+        ttk.Label(top, text="Income target (monthly)").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Entry(top, textvariable=self.income_target_var, width=14).grid(row=0, column=1, sticky="w", padx=8)
+    
+        ttk.Label(top, text="Savings goal (monthly)").grid(row=0, column=2, sticky="w", pady=4, padx=(20, 0))
+        ttk.Entry(top, textvariable=self.savings_goal_var, width=14).grid(row=0, column=3, sticky="w", padx=8)
+    
+        ttk.Button(top, text="Save", command=self.save_budget_settings).grid(row=0, column=4, padx=(20, 0))
+    
+        # Budgets table
+        table_frame = ttk.Frame(self.tab_budgets)
+        table_frame.pack(fill="both", expand=True, pady=(12, 0))
+    
+        self.budget_tree = ttk.Treeview(
+            table_frame,
+            columns=("category", "budget"),
+            show="headings",
+            height=10,
+        )
+        self.budget_tree.pack(fill="both", expand=True)
+    
+        self.budget_tree.heading("category", text="Category")
+        self.budget_tree.heading("budget", text="Monthly Budget")
+        self.budget_tree.column("category", width=220, anchor="w")
+        self.budget_tree.column("budget", width=140, anchor="e")
+    
+        # Double-click edit
+        self.budget_tree.bind("<Double-1>", self._edit_budget_cell)
+    
+        # Progress panel
+        self.budget_progress_text = tk.Text(self.tab_budgets, height=10, wrap="word")
+        self.budget_progress_text.pack(fill="x", pady=(12, 0))
+    
+        self._load_settings_into_ui()
+        self._refresh_budget_progress()
+
+        self._refresh_budget_progress()
+      
     def set_status(self, msg: str) -> None:
         self.status_var.set(msg)
         self.root.update_idletasks()
-
 
     def _update_counts(self) -> None:
         """
@@ -124,7 +180,6 @@ class ExpenseAnalyzerApp:
         manual_count = len(self.manual_transactions)
         total = csv_count + manual_count
         self.count_label.config(text=f"CSV: {csv_count} | Manual: {manual_count} | Total: {total}")
-
 
     def load_csv(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -345,9 +400,9 @@ class ExpenseAnalyzerApp:
     
         self.set_status("Deleted manual entry (saved).")
         self._refresh_all_views()
-    
-    
+       
     def clear_manual_entries(self) -> None:
+
         """
         Clear all manual entries from memory and disk.
         """
@@ -378,13 +433,125 @@ class ExpenseAnalyzerApp:
         self.set_status("Manual entries cleared.")
         self._refresh_all_views()
     
+    def _load_settings_into_ui(self) -> None:
+        self.income_target_var.set(f"{self.settings.income_target:.2f}")
+        self.savings_goal_var.set(f"{self.settings.savings_goal:.2f}")
+    
+        for item in self.budget_tree.get_children():
+            self.budget_tree.delete(item)
+    
+        for cat, budget in sorted(self.settings.category_budgets.items()):
+            self.budget_tree.insert("", "end", values=(cat, f"{budget:.2f}"))
+
+    def save_budget_settings(self) -> None:
+        from expense_analyzer.settings_store import BudgetSettings, save_settings
+    
+        # Parse top fields
+        try:
+            income_target = float(self.income_target_var.get().strip() or "0")
+            savings_goal = float(self.savings_goal_var.get().strip() or "0")
+        except ValueError:
+            messagebox.showerror("Invalid number", "Income target and savings goal must be numbers.")
+            return
+    
+        # Read budgets table
+        budgets: dict[str, float] = {}
+        for item in self.budget_tree.get_children():
+            cat, budget_str = self.budget_tree.item(item, "values")
+            try:
+                budgets[str(cat)] = float(str(budget_str))
+            except ValueError:
+                budgets[str(cat)] = 0.0
+    
+        self.settings = BudgetSettings(
+            income_target=income_target,
+            savings_goal=savings_goal,
+            category_budgets=budgets,
+        )
+    
+        messagebox.showinfo("Debug", f"Saving settings to:\n{SETTINGS_PATH}")
+
+        save_settings(SETTINGS_PATH, self.settings)
+        self.set_status("Saved budgets & goals.")
+        self._refresh_budget_progress()
+    
+    def _edit_budget_cell(self, event) -> None:
+        item = self.budget_tree.identify_row(event.y)
+        col = self.budget_tree.identify_column(event.x)
+    
+        # Only edit the "budget" column (#2)
+        if not item or col != "#2":
+            return
+    
+        x, y, w, h = self.budget_tree.bbox(item, col)
+        current = self.budget_tree.set(item, "budget")
+    
+        entry = ttk.Entry(self.budget_tree)
+        entry.place(x=x, y=y, width=w, height=h)
+        entry.insert(0, current)
+        entry.focus_set()
+    
+        def commit_edit(_event=None) -> None:
+            val = entry.get().strip()
+            try:
+                float(val or "0")
+            except ValueError:
+                messagebox.showerror("Invalid budget", "Budget must be a number.")
+                entry.destroy()
+                return
+    
+            self.budget_tree.set(item, "budget", val)
+            entry.destroy()
+            self._refresh_budget_progress()
+    
+        entry.bind("<Return>", commit_edit)
+        entry.bind("<FocusOut>", commit_edit)
+
+    def _refresh_budget_progress(self) -> None:
+        self.budget_progress_text.delete("1.0", "end")
+    
+        transactions = self.csv_transactions + self.manual_transactions
+        if not transactions:
+            self.budget_progress_text.insert("end", "Load a CSV or add expenses to see progress.\n")
+            return
+    
+        # Pick the most recent month in data
+        summaries = build_monthly_summary(transactions)
+        if not summaries:
+            return
+    
+        latest_month = sorted(summaries.keys())[-1]
+        s = summaries[latest_month]
+    
+        # Read current settings (if not loaded yet, act like zeros)
+        income_target = 0.0
+        savings_goal = 0.0
+        budgets: dict[str, float] = {}
+    
+        if hasattr(self, "settings"):
+            income_target = float(self.settings.income_target)
+            savings_goal = float(self.settings.savings_goal)
+            budgets = dict(self.settings.category_budgets)
+    
+        lines = []
+        lines.append(f"Month: {latest_month}\n")
+        lines.append(f"Income: {s.income_total:.2f} / Target: {income_target:.2f}\n")
+        lines.append(f"Expenses: {s.expense_total:.2f}\n")
+        lines.append(f"Net: {s.net_total:.2f} / Savings goal: {savings_goal:.2f}\n\n")
+    
+        lines.append("Budgets by category:\n")
+        for cat, spent in s.by_category.items():
+            budget = float(budgets.get(cat, 0.0))
+            remaining = budget - spent
+            lines.append(f"  - {cat}: spent {spent:.2f} / budget {budget:.2f} (remaining {remaining:.2f})\n")
+    
+        self.budget_progress_text.insert("end", "".join(lines))
 
     def _refresh_all_views(self) -> None:
         self._update_counts()
         self._populate_transactions()
         self._populate_summary()
         self._populate_alerts()
-
 
     def _populate_transactions(self) -> None:
         for item in self.txn_tree.get_children():

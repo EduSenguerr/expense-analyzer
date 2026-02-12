@@ -1,0 +1,12 @@
+{
+  "income_target": 6000.0,
+  "savings_goal": 2000.0,
+  "category_budgets": {
+    "Coffee": 60.0,
+    "Groceries": 600.0,
+    "Rent": 800.0,
+    "Subscriptions": 70.0,
+    "Transport": 25.0,
+    "Uncategorized": 450.0
+  }
+}
