@@ -138,6 +138,12 @@ class ExpenseAnalyzerApp:
         ttk.Entry(top, textvariable=self.savings_goal_var, width=14).grid(row=0, column=3, sticky="w", padx=8)
     
         ttk.Button(top, text="Save", command=self.save_budget_settings).grid(row=0, column=4, padx=(20, 0))
+
+        ttk.Label(top, text="Month").grid(row=1, column=0, sticky="w", pady=(10, 4))
+        self.month_var = tk.StringVar(value="")
+        self.month_menu = ttk.Combobox(top, textvariable=self.month_var, state="readonly", width=12)
+        self.month_menu.grid(row=1, column=1, sticky="w", padx=8, pady=(10, 4))
+        self.month_menu.bind("<<ComboboxSelected>>", lambda _e: self._refresh_budget_progress())
     
         # Budgets table
         table_frame = ttk.Frame(self.tab_budgets)
@@ -520,9 +526,17 @@ class ExpenseAnalyzerApp:
         if not summaries:
             return
     
-        latest_month = sorted(summaries.keys())[-1]
-        s = summaries[latest_month]
-    
+        chosen = ""
+        if hasattr(self, "month_var"):
+            chosen = self.month_var.get().strip()
+        
+        if chosen and chosen in summaries:
+            month_key = chosen
+        else:
+            month_key = sorted(summaries.keys())[-1]
+        
+        s = summaries[month_key]
+
         # Read current settings (if not loaded yet, act like zeros)
         income_target = 0.0
         savings_goal = 0.0
@@ -534,7 +548,7 @@ class ExpenseAnalyzerApp:
             budgets = dict(self.settings.category_budgets)
     
         lines = []
-        lines.append(f"Month: {latest_month}\n")
+        lines.append(f"Month: {month_key}\n")
         lines.append(f"Income: {s.income_total:.2f} / Target: {income_target:.2f}\n")
         lines.append(f"Expenses: {s.expense_total:.2f}\n")
         lines.append(f"Net: {s.net_total:.2f} / Savings goal: {savings_goal:.2f}\n\n")
@@ -547,11 +561,36 @@ class ExpenseAnalyzerApp:
     
         self.budget_progress_text.insert("end", "".join(lines))
 
+    def _refresh_month_options(self) -> None:
+        transactions = self.csv_transactions + self.manual_transactions
+        summaries = build_monthly_summary(transactions) if transactions else {}
+    
+        months = sorted(summaries.keys())
+        current = self.month_var.get().strip()
+    
+        self.month_menu["values"] = months
+    
+        if not months:
+            self.month_var.set("")
+            return
+    
+        # Keep current selection if still available; otherwise pick latest
+        if current in months:
+            self.month_var.set(current)
+        else:
+            self.month_var.set(months[-1])
+
     def _refresh_all_views(self) -> None:
         self._update_counts()
         self._populate_transactions()
         self._populate_summary()
         self._populate_alerts()
+
+        if hasattr(self, "month_menu"):
+            self._refresh_month_options()
+
+        if hasattr(self, "budget_progress_text"):
+            self._refresh_budget_progress()
 
     def _populate_transactions(self) -> None:
         for item in self.txn_tree.get_children():
